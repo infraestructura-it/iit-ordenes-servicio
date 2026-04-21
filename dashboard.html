@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>IIT — Dashboard Órdenes de Servicio</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -399,6 +401,21 @@
 
   .btn-close:hover { border-color: var(--error); color: var(--error); }
 
+  .btn-pdf {
+    background: rgba(0,229,160,0.08);
+    border: 1px solid rgba(0,229,160,0.3);
+    border-radius: 6px;
+    padding: 6px 14px;
+    color: var(--success);
+    cursor: pointer;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.5px;
+    transition: all 0.2s;
+  }
+
+  .btn-pdf:hover { background: rgba(0,229,160,0.15); border-color: var(--success); }
+
   .modal-body { padding: 24px; }
 
   .detail-section { margin-bottom: 24px; }
@@ -554,6 +571,7 @@
       <h2 id="modalOrderId">OS-000000</h2>
       <div style="display:flex;gap:8px;align-items:center;">
         <span id="modalStatusBadge" class="status-badge pendiente">pendiente</span>
+        <button class="btn-pdf" id="btnPdf" onclick="generarPDF()">⬇ PDF</button>
         <button class="btn-close" onclick="closeModal()">✕ CERRAR</button>
       </div>
     </div>
@@ -715,6 +733,7 @@ function render() {
 function openModal(orderId) {
   const o = allOrders.find(x => x.orderId === orderId);
   if (!o) return;
+  _ordenActual = o; // guardar para generarPDF
 
   document.getElementById('modalOrderId').textContent = o.orderId;
   document.getElementById('modalStatusBadge').textContent = (o.status || '').replace('-',' ');
@@ -859,6 +878,271 @@ document.getElementById('searchInput').addEventListener('input', e => {
 });
 
 document.getElementById('refreshBtn').addEventListener('click', loadOrders);
+
+// ─── GENERAR PDF ──────────────────────────────────────────────
+let _ordenActual = null; // orden abierta en el modal
+
+async function generarPDF() {
+  if (!_ordenActual) return;
+  const o = _ordenActual;
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+
+  const W = 210; // ancho A4
+  const margen = 18;
+  let y = 0;
+
+  // ── PALETA ──
+  const DARK   = [8,  11, 16];
+  const CYAN   = [0,  212, 255];
+  const BLUE   = [0,  119, 255];
+  const WHITE  = [232,240,248];
+  const MUTED  = [74, 96, 112];
+  const BORDER = [30, 42, 56];
+  const GREEN  = [0,  229, 160];
+  const WARN   = [255,183,0];
+  const RED    = [255,69, 96];
+
+  // ── HEADER DEGRADADO ──
+  doc.setFillColor(...DARK);
+  doc.rect(0, 0, W, 40, 'F');
+
+  // Barra cyan superior
+  doc.setFillColor(...CYAN);
+  doc.rect(0, 0, W, 2, 'F');
+
+  // Logo IIT box
+  doc.setFillColor(...BLUE);
+  doc.roundedRect(margen, 8, 18, 18, 2, 2, 'F');
+  doc.setTextColor(...DARK);
+  doc.setFontSize(9);
+  doc.setFont('helvetica','bold');
+  doc.text('IIT', margen + 9, 19, { align: 'center' });
+
+  // Nombre empresa
+  doc.setTextColor(...WHITE);
+  doc.setFontSize(13);
+  doc.setFont('helvetica','bold');
+  doc.text('Infraestructura-IT', margen + 22, 15);
+  doc.setTextColor(...MUTED);
+  doc.setFontSize(7);
+  doc.setFont('helvetica','normal');
+  doc.text('SOPORTE & MANTENIMIENTO · BOGOTÁ, COLOMBIA', margen + 22, 21);
+
+  // OS ID derecha
+  doc.setTextColor(...CYAN);
+  doc.setFontSize(14);
+  doc.setFont('helvetica','bold');
+  doc.text(o.orderId || '—', W - margen, 15, { align: 'right' });
+  doc.setTextColor(...MUTED);
+  doc.setFontSize(7);
+  doc.setFont('helvetica','normal');
+  doc.text('ORDEN DE SERVICIO', W - margen, 21, { align: 'right' });
+
+  // Status badge
+  const statusColor = {
+    pendiente: WARN, enviada: BLUE, 'en-proceso': CYAN, cerrada: GREEN
+  }[o.status] || MUTED;
+  doc.setFillColor(...statusColor);
+  doc.roundedRect(W - margen - 28, 25, 28, 7, 1.5, 1.5, 'F');
+  doc.setTextColor(...DARK);
+  doc.setFontSize(7);
+  doc.setFont('helvetica','bold');
+  doc.text((o.status || 'pendiente').toUpperCase().replace('-',' '), W - margen - 14, 29.5, { align: 'center' });
+
+  // Fecha
+  doc.setTextColor(...MUTED);
+  doc.setFontSize(7);
+  doc.setFont('helvetica','normal');
+  doc.text(o.createdAt ? new Date(o.createdAt).toLocaleString('es-CO') : '—', margen + 22, 29);
+
+  y = 48;
+
+  // ── FUNCIÓN HELPERS ──
+  const seccion = (titulo, color = BLUE) => {
+    doc.setFillColor(...DARK);
+    doc.rect(margen, y, W - margen*2, 7, 'F');
+    doc.setFillColor(...color);
+    doc.rect(margen, y, 3, 7, 'F');
+    doc.setTextColor(...WHITE);
+    doc.setFontSize(8);
+    doc.setFont('helvetica','bold');
+    doc.text(titulo, margen + 6, y + 5);
+    y += 10;
+  };
+
+  const campo = (label, valor, x = margen, ancho = W - margen*2) => {
+    if (!valor || valor === '—') return;
+    doc.setTextColor(...MUTED);
+    doc.setFontSize(7);
+    doc.setFont('helvetica','normal');
+    doc.text(label.toUpperCase(), x, y);
+    doc.setTextColor(...WHITE);
+    doc.setFontSize(8.5);
+    doc.setFont('helvetica','bold');
+    // wrap texto largo
+    const lines = doc.splitTextToSize(String(valor), ancho - 45);
+    doc.text(lines, x + 44, y);
+    y += Math.max(6, lines.length * 5);
+  };
+
+  const lineaSep = () => {
+    doc.setDrawColor(...BORDER);
+    doc.setLineWidth(0.3);
+    doc.line(margen, y, W - margen, y);
+    y += 4;
+  };
+
+  const check = (y_pos) => {
+    // fondo superficie
+    doc.setFillColor(13, 17, 23);
+    doc.rect(margen, y_pos - 4, W - margen*2, y - y_pos + 8, 'F');
+    doc.setDrawColor(...BORDER);
+    doc.setLineWidth(0.3);
+    doc.rect(margen, y_pos - 4, W - margen*2, y - y_pos + 8);
+  };
+
+  // ── SECCIÓN 1 — DATOS SOLICITANTE ──
+  seccion('1. DATOS DEL SOLICITANTE');
+  const y1 = y;
+  campo('Nombre',   o.nombre);
+  campo('Empresa',  o.empresa);
+  campo('Teléfono', o.telefono);
+  campo('Correo',   o.correo);
+  campo('Cargo',    o.cargo);
+  lineaSep();
+
+  // ── SECCIÓN 2 — UBICACIÓN ──
+  seccion('2. UBICACIÓN DEL SERVICIO');
+  campo('Ciudad',    o.ciudad + (o.departamento ? ', ' + o.departamento : ''));
+  campo('Dirección', o.direccion);
+  campo('Referencia',o.referencia);
+  campo('Recibe',    o.personaRecibe);
+  lineaSep();
+
+  // ── SECCIÓN 3 — SERVICIO ──
+  seccion('3. DESCRIPCIÓN DEL SERVICIO');
+  campo('Tipo',      o.tipoServicio);
+  campo('Área',      o.area);
+
+  // Prioridad con color
+  if (o.prioridad) {
+    const priColor = { baja: GREEN, media: WARN, alta: RED, critica: RED }[o.prioridad] || MUTED;
+    doc.setTextColor(...MUTED);
+    doc.setFontSize(7);
+    doc.setFont('helvetica','normal');
+    doc.text('PRIORIDAD', margen, y);
+    doc.setFillColor(...priColor);
+    doc.roundedRect(margen + 44, y - 4, 22, 6, 1, 1, 'F');
+    doc.setTextColor(...DARK);
+    doc.setFontSize(7);
+    doc.setFont('helvetica','bold');
+    doc.text(o.prioridad.toUpperCase(), margen + 55, y, { align: 'center' });
+    y += 7;
+  }
+
+  campo('Fecha req.', o.fechaRequerida);
+  campo('Ventana',    o.ventana);
+  campo('Duración',   o.duracion);
+
+  if (o.sintoma) {
+    doc.setTextColor(...MUTED);
+    doc.setFontSize(7);
+    doc.text('SÍNTOMA', margen, y);
+    doc.setTextColor(...WHITE);
+    doc.setFontSize(8);
+    doc.setFont('helvetica','normal');
+    const lines = doc.splitTextToSize(o.sintoma, W - margen*2 - 44);
+    doc.text(lines, margen + 44, y);
+    y += lines.length * 5 + 2;
+  }
+  lineaSep();
+
+  // Nueva página si queda poco espacio
+  if (y > 220) { doc.addPage(); y = 20; }
+
+  // ── SECCIÓN 4 — EQUIPOS ──
+  if (o.equipos?.length || o.marca) {
+    seccion('4. EQUIPOS INVOLUCRADOS', CYAN);
+    if (o.equipos?.length) campo('Equipos', o.equipos.join(', '));
+    campo('Marca/Modelo', o.marca);
+    campo('N° Serie',     o.serie);
+    campo('Observaciones',o.obsEquipos);
+    lineaSep();
+  }
+
+  // ── SECCIÓN 5 — ADICIONAL ──
+  if (o.antecedentes || o.contrato || o.notas) {
+    seccion('5. INFORMACIÓN ADICIONAL', MUTED);
+    campo('Contrato',     o.contrato);
+    campo('Centro costo', o.centroCosto);
+    campo('Antecedentes', o.antecedentes);
+    campo('Notas',        o.notas);
+    lineaSep();
+  }
+
+  // Nueva página si queda poco espacio
+  if (y > 210) { doc.addPage(); y = 20; }
+
+  // ── SECCIÓN 6 — QR ──
+  seccion('6. CÓDIGO QR — ACCESO DIRECTO', GREEN);
+
+  // Generar QR como imagen usando canvas oculto
+  const formUrl = `https://infraestructura-it.github.io/iit-ordenes-servicio/orden.html?orden=${encodeURIComponent(o.orderId)}&nombre=${encodeURIComponent(o.nombre||'')}&telefono=${encodeURIComponent(o.telefono||'')}&correo=${encodeURIComponent(o.correo||'')}&empresa=${encodeURIComponent(o.empresa||'')}`;
+
+  // QR via API como imagen
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(formUrl)}&bgcolor=ffffff&color=000000&margin=2`;
+
+  try {
+    const qrImg = await cargarImagen(qrUrl);
+    doc.addImage(qrImg, 'PNG', margen, y, 35, 35);
+  } catch {}
+
+  doc.setTextColor(...MUTED);
+  doc.setFontSize(7);
+  doc.text('Escanee para abrir el formulario completo', margen + 40, y + 8);
+  doc.setTextColor(...CYAN);
+  doc.setFontSize(7);
+  const urlLines = doc.splitTextToSize(formUrl, W - margen*2 - 42);
+  doc.text(urlLines, margen + 40, y + 14);
+  y += 40;
+  lineaSep();
+
+  // ── FOOTER ──
+  const totalPages = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFillColor(...DARK);
+    doc.rect(0, 285, W, 12, 'F');
+    doc.setDrawColor(...BORDER);
+    doc.setLineWidth(0.3);
+    doc.line(0, 285, W, 285);
+    doc.setTextColor(...MUTED);
+    doc.setFontSize(7);
+    doc.text('INFRAESTRUCTURA-IT · BOGOTÁ, COLOMBIA · Sistema de Órdenes de Servicio v1.0', margen, 291);
+    doc.text(`Página ${i} / ${totalPages}`, W - margen, 291, { align: 'right' });
+  }
+
+  // ── GUARDAR ──
+  doc.save(`OS-IIT-${o.orderId}-${new Date().toISOString().slice(0,10)}.pdf`);
+}
+
+// Helper: cargar imagen como dataURL
+function cargarImagen(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
 
 // ─── INIT ─────────────────────────────────────────────────────
 loadOrders();
