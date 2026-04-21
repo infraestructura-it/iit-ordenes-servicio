@@ -564,7 +564,8 @@
 <script>
 // ─── CONFIG ────────────────────────────────────────────────────
 const CONFIG = {
-  relayUrl: 'https://tu-relay.iit.co',
+  jsonbin_id:  '69e6c4f6aaba8821971e2a15',
+  jsonbin_key: '$2a$10$I8tdi11OHg1BBTt7Pyurkuf3deSsGHO3jfvOuvtCJJpKzoLV4NRHi',
   formBaseUrl: 'https://infraestructura-it.github.io/iit-ordenes-servicio/orden.html'
 };
 
@@ -575,11 +576,22 @@ let currentSearch = '';
 // ─── LOAD ORDERS ──────────────────────────────────────────────
 async function loadOrders() {
   try {
-    const res = await fetch(`${CONFIG.relayUrl}/api/orders`);
-    if (!res.ok) throw new Error();
-    allOrders = await res.json();
+    const res = await fetch(`https://api.jsonbin.io/v3/b/${CONFIG.jsonbin_id}/latest`, {
+      headers: { 'X-Master-Key': CONFIG.jsonbin_key }
+    });
+    const data = await res.json();
+    allOrders = data.record?.ordenes || [];
+    // Combinar con localStorage por si hay órdenes offline
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key.startsWith('iit-orden-')) {
+        try {
+          const o = JSON.parse(localStorage.getItem(key));
+          if (!allOrders.find(x => x.orderId === o.orderId)) allOrders.push(o);
+        } catch {}
+      }
+    }
   } catch {
-    // Demo: combinar localStorage + datos de ejemplo
     allOrders = loadDemoOrders();
   }
   render();
@@ -802,13 +814,16 @@ async function updateStatus(orderId, newStatus) {
   o.status = newStatus;
 
   try {
-    await fetch(`${CONFIG.relayUrl}/api/orders/${orderId}`, {
+    // Escribir todo el array actualizado en JSONBin
+    await fetch(`https://api.jsonbin.io/v3/b/${CONFIG.jsonbin_id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...o, status: newStatus })
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': CONFIG.jsonbin_key
+      },
+      body: JSON.stringify({ ordenes: allOrders })
     });
   } catch {
-    // Update local demo data
     const key = `iit-orden-${orderId}`;
     const stored = localStorage.getItem(key);
     if (stored) {

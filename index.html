@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>IIT — Solicitud de Servicio</title>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -420,7 +421,7 @@
     </button>
 
     <div class="relay-config">
-      Relay: <span id="relayUrlDisplay">https://tu-relay.iit.co</span> &nbsp;·&nbsp; Configura en <span>CONFIG</span>
+      Backend: <span id="relayUrlDisplay">EmailJS + JSONBin</span> &nbsp;·&nbsp; v1.0
     </div>
   </div>
 
@@ -453,12 +454,22 @@
 <script>
 // ─── CONFIG ───────────────────────────────────────────────────
 const CONFIG = {
-  relayUrl: 'https://tu-relay.iit.co',   // ← CAMBIAR a tu VPS
+  // EmailJS
+  emailjs_service:  'service_iabbyy7',
+  emailjs_template: 'bpi1966',
+  emailjs_pubkey:   'NuFkgPzzgV22Tqt5I',
+  // JSONBin
+  jsonbin_id:       '69e6c4f6aaba8821971e2a15',
+  jsonbin_key:      '$2a$10$I8tdi11OHg1BBTt7Pyurkuf3deSsGHO3jfvOuvtCJJpKzoLV4NRHi',
+  // URLs
   formBaseUrl: 'https://infraestructura-it.github.io/iit-ordenes-servicio/orden.html',
-  qrApiUrl: 'https://api.qrserver.com/v1/create-qr-code/'
+  qrApiUrl:    'https://api.qrserver.com/v1/create-qr-code/'
 };
 
-document.getElementById('relayUrlDisplay').textContent = CONFIG.relayUrl;
+// Inicializar EmailJS
+emailjs.init(CONFIG.emailjs_pubkey);
+
+document.getElementById('relayUrlDisplay').textContent = 'EmailJS + JSONBin';
 
 // ─── UTILS ────────────────────────────────────────────────────
 function generateOrderId() {
@@ -537,38 +548,40 @@ document.getElementById('btnSubmit').addEventListener('click', async () => {
   const qrImgUrl = `${CONFIG.qrApiUrl}?size=200x200&data=${encodeURIComponent(formUrl)}&bgcolor=ffffff&color=080b10&margin=2`;
 
   try {
-    // 1. Guardar orden en relay.js
-    const saveRes = await fetch(`${CONFIG.relayUrl}/api/orders`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(orderData)
+    // 1. Guardar orden en JSONBin
+    // Primero leer el bin actual
+    const getRes = await fetch(`https://api.jsonbin.io/v3/b/${CONFIG.jsonbin_id}/latest`, {
+      headers: { 'X-Master-Key': CONFIG.jsonbin_key }
+    });
+    const binData = await getRes.json();
+    const ordenes = binData.record?.ordenes || [];
+    ordenes.push(orderData);
+
+    // Escribir bin actualizado
+    await fetch(`https://api.jsonbin.io/v3/b/${CONFIG.jsonbin_id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': CONFIG.jsonbin_key
+      },
+      body: JSON.stringify({ ordenes })
     });
 
-    if (!saveRes.ok) throw new Error('Error guardando orden');
-
-    // 2. Enviar email con QR via relay.js
-    const emailRes = await fetch(`${CONFIG.relayUrl}/api/email`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        to: correo,
-        subject: `IIT — Orden de Servicio ${orderId}`,
-        html: buildEmailHtml(orderData, formUrl, qrImgUrl),
-        orderId,
-        nombre
-      })
+    // 2. Enviar email con QR via EmailJS
+    await emailjs.send(CONFIG.emailjs_service, CONFIG.emailjs_template, {
+      order_id:     orderId,
+      name:         nombre,
+      email:        correo,
+      html_content: buildEmailHtml(orderData, formUrl, qrImgUrl)
     });
-
-    if (!emailRes.ok) throw new Error('Error enviando email');
 
     // 3. UI success
     showSuccess(orderId, correo, qrImgUrl);
 
   } catch (err) {
-    console.warn('Relay no disponible, modo demo:', err.message);
-    // Demo mode: funciona sin backend
+    console.warn('Error:', err.message);
     showSuccess(orderId, correo, qrImgUrl);
-    showToast('⚠️ Modo demo — configura tu relay.js para producción', 5000);
+    showToast('⚠️ Verifica tu conexión o configuración', 5000);
   }
 
   btn.classList.remove('loading');

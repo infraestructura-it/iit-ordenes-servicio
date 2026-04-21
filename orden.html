@@ -743,7 +743,8 @@
 <script>
 // ─── CONFIG ────────────────────────────────────────────────────
 const CONFIG = {
-  relayUrl: 'https://tu-relay.iit.co',  // ← CAMBIAR
+  jsonbin_id:  '69e6c4f6aaba8821971e2a15',
+  jsonbin_key: '$2a$10$I8tdi11OHg1BBTt7Pyurkuf3deSsGHO3jfvOuvtCJJpKzoLV4NRHi'
 };
 
 // ─── CARGAR DATOS DESDE QR PARAMS ─────────────────────────────
@@ -910,17 +911,30 @@ document.getElementById('btnSave').addEventListener('click', async () => {
   };
 
   try {
-    const res = await fetch(`${CONFIG.relayUrl}/api/orders/${window._orderId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+    // Leer bin, actualizar la orden existente o agregar nueva
+    const getRes = await fetch(`https://api.jsonbin.io/v3/b/${CONFIG.jsonbin_id}/latest`, {
+      headers: { 'X-Master-Key': CONFIG.jsonbin_key }
     });
-    if (!res.ok) throw new Error('relay error');
+    const binData = await getRes.json();
+    const ordenes = binData.record?.ordenes || [];
+    const idx = ordenes.findIndex(o => o.orderId === window._orderId);
+    if (idx >= 0) {
+      ordenes[idx] = { ...ordenes[idx], ...payload };
+    } else {
+      ordenes.push(payload);
+    }
+    await fetch(`https://api.jsonbin.io/v3/b/${CONFIG.jsonbin_id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': CONFIG.jsonbin_key
+      },
+      body: JSON.stringify({ ordenes })
+    });
     showToast('✓ Orden enviada correctamente — IIT la gestionará pronto', 'success');
   } catch {
-    // Demo fallback
     localStorage.setItem(`iit-orden-${window._orderId}`, JSON.stringify(payload));
-    showToast('✓ Orden guardada (modo demo — configura relay)', 'success');
+    showToast('✓ Orden guardada localmente', 'success');
   }
 
   setTimeout(() => { window.location.href = `dashboard.html`; }, 2500);
