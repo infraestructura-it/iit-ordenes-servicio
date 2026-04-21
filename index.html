@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>IIT — Solicitud de Servicio</title>
-<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -466,8 +466,8 @@ const CONFIG = {
   qrApiUrl:    'https://api.qrserver.com/v1/create-qr-code/'
 };
 
-// Inicializar EmailJS
-emailjs.init(CONFIG.emailjs_pubkey);
+// Inicializar EmailJS v3
+emailjs.init({ publicKey: CONFIG.emailjs_pubkey });
 
 document.getElementById('relayUrlDisplay').textContent = 'EmailJS + JSONBin';
 
