@@ -457,7 +457,7 @@ const CONFIG = {
   // EmailJS
   emailjs_service:  'service_iabbyy7',
   emailjs_template: 'template_0wkaxbf',
-  emailjs_pubkey:   'NuFkgPzzgV22Tqt5l',
+  emailjs_pubkey:   'thz9bGg4ZFbVsYKhq',
   // JSONBin
   jsonbin_id:       '69e6c4f6aaba8821971e2a15',
   jsonbin_key:      '$2a$10$I8tdi11OHg1BBTt7Pyurkuf3deSsGHO3jfvOuvtCJJpKzoLV4NRHi',
@@ -467,7 +467,7 @@ const CONFIG = {
 };
 
 // Inicializar EmailJS v3
-emailjs.init({ publicKey: CONFIG.emailjs_pubkey });
+emailjs.init(CONFIG.emailjs_pubkey);
 
 document.getElementById('relayUrlDisplay').textContent = 'EmailJS + JSONBin';
 
@@ -567,17 +567,24 @@ document.getElementById('btnSubmit').addEventListener('click', async () => {
       body: JSON.stringify({ ordenes })
     });
 
-    // 2. Enviar email con QR via EmailJS
-    await emailjs.send(CONFIG.emailjs_service, CONFIG.emailjs_template, {
-      order_id:   orderId,
-      name:       nombre,
-      email:      correo,
-      empresa:    empresa,
-      telefono:   telefono,
-      fecha:      new Date().toLocaleString('es-CO'),
-      form_url:   formUrl,
-      qr_url:     qrImgUrl,
-      html_content: `<div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:24px;background:#f5f5f5;">
+    // 2. Enviar email con QR via EmailJS REST API
+    const emailRes = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        service_id:  CONFIG.emailjs_service,
+        template_id: CONFIG.emailjs_template,
+        user_id:     CONFIG.emailjs_pubkey,
+        template_params: {
+          order_id:     orderId,
+          name:         nombre,
+          email:        correo,
+          empresa:      empresa,
+          telefono:     telefono,
+          fecha:        new Date().toLocaleString('es-CO'),
+          form_url:     formUrl,
+          qr_url:       qrImgUrl,
+          html_content: `<div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:24px;background:#f5f5f5;">
 <div style="background:#080b10;border-radius:12px;padding:24px;color:#e8f0f8;">
 <h2 style="color:#00d4ff;letter-spacing:3px;margin:0 0 8px;">IIT</h2>
 <p style="color:#4a6070;font-size:11px;letter-spacing:2px;margin:0 0 16px;">INFRAESTRUCTURA-IT — ORDEN DE SERVICIO</p>
@@ -593,7 +600,10 @@ document.getElementById('btnSubmit').addEventListener('click', async () => {
 </div>
 <a href="${formUrl}" style="display:block;text-align:center;background:#0077ff;color:white;padding:12px;border-radius:8px;text-decoration:none;font-weight:700;font-size:13px;">COMPLETAR ORDEN →</a>
 </div></div>`
+        }
+      })
     });
+    if (!emailRes.ok) throw new Error(`Email error: ${await emailRes.text()}`);
 
     // 3. UI success
     showSuccess(orderId, correo, qrImgUrl);
